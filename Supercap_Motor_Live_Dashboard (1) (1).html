@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supercapacitor Motor Controller — Live Telemetry Dashboard</title>
+<style>
+  :root{
+    --bg:#0d1117; --card:#161b22; --card2:#1b222c; --line:#263040; --txt:#e6edf3; --mut:#8b98a9;
+    --acc:#f2c811; --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b; --blue:#38bdf8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;font-size:14px}
+  header{position:sticky;top:0;z-index:20;background:#0a0e14ee;backdrop-filter:blur(6px);border-bottom:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 18px}
+  .brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+  .logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#f2c811,#f59e0b);display:grid;place-items:center;color:#111;font-weight:800}
+  .brand h1{font-size:15px;margin:0;letter-spacing:.3px}
+  .brand small{color:var(--mut);display:block;font-size:11px;margin-top:1px}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:var(--card2);border:1px solid var(--line);font-size:12px;white-space:nowrap}
+  .dot{width:9px;height:9px;border-radius:50%;background:#64748b}
+  .dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok)} .dot.demo{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+  .dot.replay{background:var(--blue);box-shadow:0 0 8px var(--blue)} .dot.bad{background:var(--bad);box-shadow:0 0 8px var(--bad)}
+  button,select,input{font:inherit;color:var(--txt)}
+  button{background:var(--card2);border:1px solid var(--line);padding:6px 12px;border-radius:7px;cursor:pointer}
+  button:hover{border-color:#3b4a60;background:#222b37} button.primary{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  button.primary:hover{background:#ffd93a} button.on{border-color:var(--acc);color:var(--acc)}
+  select,input[type=number]{background:var(--card2);border:1px solid var(--line);border-radius:7px;padding:5px 8px}
+  main{padding:14px 18px 40px;max-width:1900px;margin:0 auto}
+  .banner{display:none;margin-bottom:12px;padding:9px 14px;border-radius:8px;background:#3a1517;border:1px solid #7f1d1d;color:#fecaca;font-weight:600}
+  .banner.show{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .card h3{margin:0 0 8px;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut);font-weight:600}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+  .kpi{position:relative;overflow:hidden;padding-bottom:6px}
+  .kpi .lbl{font-size:12px;color:var(--mut)} .kpi .val{font-size:30px;font-weight:700;line-height:1.15;margin:2px 0}
+  .kpi .val small{font-size:14px;color:var(--mut);font-weight:500;margin-left:3px}
+  .kpi .sub{font-size:11px;color:var(--mut);display:flex;justify-content:space-between}
+  .kpi canvas{width:100%;height:42px;display:block;margin-top:4px}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c)}
+  .mid{display:grid;grid-template-columns:1.25fr 1fr 1.15fr;gap:12px;margin-bottom:16px}
+  @media(max-width:1150px){.mid{grid-template-columns:1fr}}
+  .gauges{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .gauges canvas{width:100%;height:130px;display:block}
+  .leds{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .led{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;background:var(--card2);border:1px solid var(--line)}
+  .led i{width:12px;height:12px;border-radius:50%;background:#475569;flex:none}
+  .led.on i{background:var(--ok);box-shadow:0 0 9px var(--ok)} .led.alarm i{background:var(--bad);box-shadow:0 0 9px var(--bad)}
+  .led.warn i{background:var(--warn);box-shadow:0 0 9px var(--warn)}
+  .led b{font-weight:600;font-size:12px;display:block} .led span{font-size:11px;color:var(--mut)}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .stat{background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .stat span{display:block;font-size:10.5px;color:var(--mut)} .stat b{font-size:16px}
+  #log{height:112px;overflow:auto;font:12px ui-monospace,Consolas,monospace;color:#b7c4d4;background:#0b1017;border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+  #log div{padding:1px 0} #log em{color:var(--acc);font-style:normal}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 12px}
+  .tabs h2{margin:0 auto 0 0;font-size:15px}
+  .charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+  .chart{padding:9px 11px 6px}
+  .chart .hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
+  .chart .hd span{font-size:12px;color:#cbd5e1} .chart .hd b{font-size:15px}
+  .chart canvas{width:100%;height:135px;display:block;cursor:crosshair}
+  .chart .ft{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut);margin-top:2px}
+  dialog{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:18px 20px;min-width:320px}
+  dialog::backdrop{background:#000a}
+  dialog label{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:9px 0}
+  dialog input,dialog select{width:130px}
+  footer{margin-top:22px;color:var(--mut);font-size:11.5px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="logo">⚡</div>
+    <div><h1>SUPERCAPACITOR MOTOR CONTROLLER</h1><small>Real-time telemetry dashboard · Arduino serial JSON stream</small></div></div>
+  <span class="pill"><span class="dot" id="dot"></span><span id="status">Idle — choose a data source</span></span>
+  <span class="pill" id="rate">0.0 samples/s</span>
+  <button class="primary" id="btnConnect">🔌 Connect Arduino</button>
+  <button id="btnDemo">▶ Demo data</button>
+  <button id="btnCsv">📂 Replay CSV</button>
+  <button id="btnPause">⏸ Pause</button>
+  <button id="btnClear">🗑 Clear</button>
+  <button id="btnExport">⬇ Export CSV</button>
+  <button id="btnSet">⚙ Settings</button>
+  <input type="file" id="fileCsv" accept=".csv" hidden>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="mid">
+    <div class="card"><h3>Gauges</h3><div class="gauges">
+      <canvas id="gV"></canvas><canvas id="gI"></canvas><canvas id="gL"></canvas></div></div>
+    <div class="card"><h3>Controller status</h3><div class="leds" id="leds"></div></div>
+    <div class="card"><h3>Session statistics &amp; event log</h3>
+      <div class="stats">
+        <div class="stat"><span>V max</span><b id="sVmax">0.0 V</b></div>
+        <div class="stat"><span>I max</span><b id="sImax">0.00 A</b></div>
+        <div class="stat"><span>P max</span><b id="sPmax">0.0 W</b></div>
+        <div class="stat"><span>Samples</span><b id="sN">0</b></div>
+        <div class="stat"><span>Device time</span><b id="sT">0.0 s</b></div>
+        <div class="stat"><span>Last packet</span><b id="sLast">—</b></div>
+      </div>
+      <div id="log"></div></div>
+  </section>
+
+  <div class="tabs" id="tabs"><h2>Live telemetry — <span id="chartCount">22</span> signals</h2></div>
+  <section class="charts" id="charts"></section>
+
+  <footer>Same signals and formulas as <code>dashboard.py</code> (power = V·I, energy = ∫P dt, speed ≈ PWM/200·3000, load = |I|/30, headroom = V − 12.5, dI/dt, heat = PWM/255·|I|). Works offline — open in Chrome or Edge for USB serial.</footer>
+</main>
+
+<dialog id="dlg">
+  <h3 style="margin-top:0">Settings</h3>
+  <label>Baud rate <select id="cBaud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
+  <label>Chart window (points) <select id="cWin"><option>200</option><option>600</option><option>1200</option><option>3000</option></select></label>
+  <label>Target voltage [V] <input type="number" id="cVt" step="0.1"></label>
+  <label>Max current [A] (ACS712) <input type="number" id="cImax" step="1"></label>
+  <label>PWM full-scale for speed <input type="number" id="cRpmPwm" step="1"></label>
+  <label>Max speed [rpm] <input type="number" id="cRpmMax" step="100"></label>
+  <label>Load alarm at [%] <input type="number" id="cLoadAlarm" step="5"></label>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+    <button id="dlgCancel">Cancel</button><button class="primary" id="dlgOk">Apply</button></div>
+</dialog>
+
+<script>
+"use strict";
+/* ============================ CONFIG ============================ */
+const cfg = { baud:9600, win:600, vt:12.5, imax:30, rpmPwm:200, rpmMax:3000, loadAlarm:80 };
+const $ = s => document.querySelector(s);
+const B = v => v===true || v===1 || v==='1' || String(v).toLowerCase()==='true';
+const fmt = (v,d=2) => (v===undefined||v===null||Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
+
+/* Signal definitions: same 21 plots as dashboard.py (+ relay 2) */
+const CH = [
+  // key, title, colour, unit, decimals, group, binary
+  ['pot','Potentiometer (ADC)','#22d3ee','',0,'Motor'],
+  ['pwm','Motor PWM Output','#f59e0b','',0,'Motor'],
+  ['voltage','Supercap Input Voltage','#ef4444','V',2,'Electrical'],
+  ['current','Motor Current','#10b981','A',2,'Electrical'],
+  ['power','Instantaneous Power','#eab308','W',1,'Electrical'],
+  ['energy','Accumulated Energy','#8b5cf6','J',1,'Electrical'],
+  ['rpm','Estimated Speed (PWM)','#06b6d4','rpm',0,'Motor'],
+  ['load','Load Index |I|/Imax','#f97316','',2,'Motor'],
+  ['verr','Voltage Headroom','#dc2626','V',2,'Electrical'],
+  ['didt','dI/dt','#84cc16','A/s',1,'Electrical'],
+  ['pitch','Vehicle Pitch','#a78bfa','°',2,'Safety'],
+  ['motor_running','Motor State (1 = run)','#22c55e','',0,'Safety',1],
+  ['tilted_up','Tilt Alarm (1 = up)','#e11d48','',0,'Safety',1],
+  ['relay1','Relay 1 (1 = ON)','#3b82f6','',0,'Safety',1],
+  ['relay2','Relay 2 (1 = ON)','#60a5fa','',0,'Safety',1],
+  ['voltage_relay','Voltage Relay (1 = ON)','#14b8a6','',0,'Safety',1],
+  ['current_tilt_relay','Current / Tilt Relay','#f43f5e','',0,'Safety',1],
+  ['vsensor','V-Sensor Output','#facc15','V',2,'Sensors'],
+  ['isensor','I-Sensor Output','#a3e635','V',3,'Sensors'],
+  ['zero_i','Zero-Current Reference','#38bdf8','V',3,'Sensors'],
+  ['pwmcur','PWM / Current Ratio','#fb7185','',1,'Motor'],
+  ['heat','Heat Proxy (PWM × I)','#f87171','',2,'Motor'],
+];
+const KPI = [
+  ['voltage','Supercap voltage','V',2,'#ef4444'],
+  ['current','Motor current','A',2,'#10b981'],
+  ['power','Power','W',1,'#eab308'],
+  ['energy','Energy','J',1,'#8b5cf6'],
+  ['pwm','PWM output','/255',0,'#f59e0b'],
+  ['rpm','Estimated speed','rpm',0,'#06b6d4'],
+  ['pitch','Pitch','°',2,'#a78bfa'],
+  ['loadPct','Load index','%',0,'#f97316'],
+];
+const LEDS = [
+  ['motor_running','Motor','RUN','STOP','on'],
+  ['tilted_up','Tilt sensor','TILTED UP','OK','alarm'],
+  ['relay1','Relay 1','ON','OFF','on'],
+  ['relay2','Relay 2','ON','OFF','on'],
+  ['voltage_relay','Voltage relay','ON','OFF','on'],
+  ['current_tilt_relay','Current/tilt relay','ON','OFF','warn'],
+  ['current_increased','Current rising','YES','no','warn'],
+];
+
+/* ============================ DATA STORE ============================ */
+const keys = ['t', ...CH.map(c=>c[0]), 'loadPct'];
+let cols = {};   keys.forEach(k => cols[k] = []);
+let LOG = [];    // raw packets for CSV export
+let st = { n:0, vmax:0, imax:0, pmax:0, energy:0, prevT:null, prevI:null, prev:{}, lastHost:0, lastDevT:0, hostStart:performance.now(), stamps:[] };
+let mode = 'idle', paused = false;
+
+function resetData(){
+  keys.forEach(k => cols[k] = []);
+  LOG = [];
+  st = { n:0, vmax:0, imax:0, pmax:0, energy:0, prevT:null, prevI:null, prev:{}, lastHost:0, lastDevT:0, hostStart:performance.now(), stamps:[] };
+  $('#log').innerHTML = '';
+}
+
+function ingest(d){
+  if(paused) return;
+  const now = performance.now();
+  const t = d.time_ms !== undefined ? Number(d.time_ms)/1000 : (now - st.hostStart)/1000;
+  const V = Number(d.voltage)||0, I = Number(d.current)||0, pwm = Number(d.pwm)||0;
+  const power = V*I;
+  const dt = st.prevT===null ? 0 : t - st.prevT;
+  if(st.prevT!==null) st.energy += power*Math.max(dt,0);
+  const didt = (st.prevT===null || dt===0) ? 0 : (I - st.prevI)/dt;
+
+  const row = {
+    t, pot:Number(d.pot)||0, pwm, voltage:V, current:I, power, energy:st.energy,
+    rpm:(pwm/cfg.rpmPwm)*cfg.rpmMax, load:Math.abs(I)/cfg.imax, verr:V-cfg.vt, didt,
+    pitch:Number(d.pitch)||0,
+    motor_running:+B(d.motor_running), tilted_up:+B(d.tilted_up), relay1:+B(d.relay1), relay2:+B(d.relay2),
+    voltage_relay:+B(d.voltage_relay), current_tilt_relay:+B(d.current_tilt_relay),
+    vsensor:V, isensor:Number(d.current_sensor_voltage)||0,
+    zero_i: d.zero_current_voltage!==undefined ? Number(d.zero_current_voltage) : 2.5,
+    pwmcur: pwm/Math.max(Math.abs(I),0.05), heat:(pwm/255)*Math.abs(I),
+  };
+  row.loadPct = row.load*100;
+
+  keys.forEach(k => { const a = cols[k]; a.push(row[k]); if(a.length > cfg.win) a.splice(0, a.length-cfg.win); });
+  LOG.push(d); if(LOG.length > 300000) LOG.shift();
+
+  // events
+  const cur = { motor_running:row.motor_running, tilted_up:row.tilted_up, relay1:row.relay1, relay2:row.relay2,
+                voltage_relay:row.voltage_relay, current_tilt_relay:row.current_tilt_relay, current_increased:+B(d.current_increased) };
+  LEDS.forEach(([k,name,onT,offT]) => {
+    if(st.prev[k]!==undefined && st.prev[k]!==cur[k]) logEvent(`${name} → <em>${cur[k]?onT:offT}</em>`);
+  });
+  st.prev = cur; st.cur = cur;
+
+  st.prevT = t; st.prevI = I; st.n++; st.lastHost = now; st.lastDevT = t;
+  st.vmax = Math.max(st.vmax,V); st.imax = Math.max(st.imax,Math.abs(I)); st.pmax = Math.max(st.pmax,power);
+  st.stamps.push(now); if(st.stamps.length>25) st.stamps.shift();
+}
+function logEvent(html){
+  const el = $('#log'); const d = document.createElement('div');
+  d.innerHTML = `${new Date().toLocaleTimeString()}  ${html}`; el.prepend(d);
+  while(el.children.length>150) el.lastChild.remove();
+}
+
+/* ============================ DRAWING ============================ */
+function setup(canvas){
+  const dpr = window.devicePixelRatio||1, w = canvas.clientWidth, h = canvas.clientHeight;
+  if(canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)){ canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr); }
+  const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  return [ctx,w,h];
+}
+function range(arr, bin){
+  if(bin) return [-0.15,1.15];
+  let lo=Infinity, hi=-Infinity;
+  for(const v of arr){ if(v<lo) lo=v; if(v>hi) hi=v; }
+  if(!isFinite(lo)) return [0,1];
+  if(lo===hi){ const p = Math.abs(lo)*0.05+0.5; return [lo-p, hi+p]; }
+  const p = (hi-lo)*0.1; return [lo-p, hi+p];
+}
+function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`; }
+
+function drawChart(canvas, def){
+  const [key,,color,unit,dec,,bin] = def;
+  const [ctx,W,H] = setup(canvas);
+  const xs = cols.t, ys = cols[key], n = xs.length;
+  const pl=38, pr=6, pt=6, pb=15, pw=W-pl-pr, ph=H-pt-pb;
+  ctx.font = '10px Segoe UI, Arial'; ctx.fillStyle = '#7d8a9c'; ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 1;
+  const [lo,hi] = range(ys,bin);
+  const Y = v => pt + ph - (v-lo)/(hi-lo)*ph;
+  // grid + y labels
+  const ticks = bin ? [0,1] : [0,1,2,3].map(i => lo + (hi-lo)*i/3);
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(const v of ticks){ const y=Y(v); ctx.beginPath(); ctx.moveTo(pl,y); ctx.lineTo(W-pr,y); ctx.stroke();
+    ctx.fillText(bin ? (v?'ON':'OFF') : (Math.abs(v)>=1000? v.toFixed(0) : v.toFixed(Math.min(dec,2))), pl-4, y); }
+  if(n<2){ ctx.textAlign='center'; ctx.fillStyle='#64748b'; ctx.fillText('waiting for data…', W/2, H/2); return; }
+  const x0=xs[0], x1=xs[n-1], span=Math.max(x1-x0,1e-6);
+  const X = t => pl + (t-x0)/span*pw;
+  // time labels
+  ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#7d8a9c';
+  for(let i=0;i<=3;i++){ const tt = x0+span*i/3; ctx.fillText(i===3?'now':`−${(x1-tt).toFixed(0)}s`, pl+pw*i/3, H-pb+3); }
+  // line (step for binary signals)
+  ctx.beginPath();
+  for(let i=0;i<n;i++){
+    const x=X(xs[i]), y=Y(ys[i]);
+    if(i===0) ctx.moveTo(x,y); else { if(bin) ctx.lineTo(x,Y(ys[i-1])); ctx.lineTo(x,y); }
+  }
+  ctx.lineWidth=1.6; ctx.strokeStyle=color; ctx.lineJoin='round'; ctx.stroke();
+  ctx.lineTo(X(x1),Y(lo)); ctx.lineTo(X(x0),Y(lo)); ctx.closePath();
+  const g = ctx.createLinearGradient(0,pt,0,pt+ph); g.addColorStop(0,hexA(color,.28)); g.addColorStop(1,hexA(color,0));
+  ctx.fillStyle=g; ctx.fill();
+  // hover crosshair
+  if(canvas._hx!==undefined && canvas._hx>=pl && canvas._hx<=W-pr){
+    let idx = Math.round((canvas._hx-pl)/pw*(n-1)); idx=Math.max(0,Math.min(n-1,idx));
+    const hx=X(xs[idx]), hy=Y(ys[idx]);
+    ctx.strokeStyle='#94a3b8'; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(hx,pt); ctx.lineTo(hx,pt+ph); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(hx,hy,3.5,0,7); ctx.fill();
+    const label = `${bin?(ys[idx]?'ON':'OFF'):fmt(ys[idx],dec)}${unit?' '+unit:''}  @ ${xs[idx].toFixed(1)}s`;
+    ctx.font='11px Segoe UI, Arial'; const tw = ctx.measureText(label).width+10;
+    const bx = Math.min(Math.max(hx-tw/2,pl),W-pr-tw);
+    ctx.fillStyle='#0b1017ee'; ctx.strokeStyle='#334155'; ctx.fillRect(bx,pt+1,tw,17); ctx.strokeRect(bx,pt+1,tw,17);
+    ctx.fillStyle='#e6edf3'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(label,bx+5,pt+10);
+  } else { // last-value dot
+    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(X(x1),Y(ys[n-1]),3,0,7); ctx.fill();
+  }
+}
+function drawSpark(canvas, arr, color){
+  const [ctx,W,H] = setup(canvas), n = arr.length; if(n<2) return;
+  const [lo,hi] = range(arr,false);
+  ctx.beginPath();
+  for(let i=0;i<n;i++){ const x=i/(n-1)*W, y=H-2-(arr[i]-lo)/(hi-lo)*(H-4); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,hexA(color,.3)); g.addColorStop(1,hexA(color,0)); ctx.fillStyle=g; ctx.fill();
+}
+function drawGauge(canvas, val, min, max, label, unit, dec, zones){
+  const [ctx,W,H] = setup(canvas);
+  const cx=W/2, cy=H-22, r=Math.min(W/2-10, H-34);
+  const frac = Math.max(0,Math.min(1,(val-min)/(max-min)));
+  ctx.lineCap='round'; ctx.lineWidth=11;
+  ctx.strokeStyle='#243041'; ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,2*Math.PI); ctx.stroke();
+  let col = zones[0][1]; for(const [lim,c] of zones){ if(frac*100>=lim) col=c; }
+  ctx.strokeStyle=col; ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,Math.PI+Math.PI*frac); ctx.stroke();
+  ctx.fillStyle='#e6edf3'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  ctx.font='600 20px Segoe UI, Arial'; ctx.fillText(`${fmt(val,dec)}${unit}`,cx,cy-6);
+  ctx.font='11px Segoe UI, Arial'; ctx.fillStyle='#8b98a9'; ctx.fillText(label,cx,cy+14);
+  ctx.font='10px Segoe UI, Arial'; ctx.textAlign='left'; ctx.fillText(min,cx-r-4,cy+14); ctx.textAlign='right'; ctx.fillText(max,cx+r+4,cy+14);
+}
+
+/* ============================ UI BUILD ============================ */
+const chartCanvas = {}, chartVal = {}, chartFt = {}, kpiEls = {};
+function build(){
+  $('#kpis').innerHTML = KPI.map(([k,name,unit,dec,color]) => `
+    <div class="card kpi" style="--c:${color}"><div class="lbl">${name}</div>
+      <div class="val"><span id="k_${k}">—</span><small>${unit}</small></div>
+      <div class="sub"><span id="kmin_${k}">min —</span><span id="kmax_${k}">max —</span></div><canvas id="ks_${k}"></canvas></div>`).join('');
+  $('#leds').innerHTML = LEDS.map(([k,name]) => `<div class="led" id="led_${k}"><i></i><div><b>${name}</b><span id="ledt_${k}">—</span></div></div>`).join('');
+  $('#charts').innerHTML = CH.map(c => `
+    <div class="card chart" data-g="${c[5]}"><div class="hd"><span>${c[1]}${c[3]?` [${c[3]}]`:''}</span><b id="cv_${c[0]}" style="color:${c[2]}">—</b></div>
+      <canvas id="cc_${c[0]}"></canvas><div class="ft"><span id="cmin_${c[0]}">min —</span><span id="cavg_${c[0]}">avg —</span><span id="cmax_${c[0]}">max —</span></div></div>`).join('');
+  const groups = ['All','Electrical','Motor','Safety','Sensors'];
+  groups.forEach((g,i) => { const b=document.createElement('button'); b.textContent=g; if(!i) b.classList.add('on');
+    b.onclick = () => { document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+      let shown=0; document.querySelectorAll('.chart').forEach(el => { const s = g==='All'||el.dataset.g===g; el.style.display = s?'':'none'; if(s) shown++; });
+      $('#chartCount').textContent = shown; draw(); };
+    $('#tabs').appendChild(b); });
+  CH.forEach(c => { const cv = $('#cc_'+c[0]);
+    cv.addEventListener('mousemove', e => { cv._hx = e.clientX - cv.getBoundingClientRect().left; drawChart(cv,c); });
+    cv.addEventListener('mouseleave', () => { cv._hx = undefined; drawChart(cv,c); }); });
+  $('#chartCount').textContent = CH.length;
+}
+
+/* ============================ RENDER LOOP ============================ */
+function stats(a){ if(!a.length) return null; let lo=Infinity,hi=-Infinity,s=0; for(const v of a){ if(v<lo)lo=v; if(v>hi)hi=v; s+=v; } return [lo,hi,s/a.length]; }
+function draw(){
+  CH.forEach(c => { const cv=$('#cc_'+c[0]); if(cv.offsetParent!==null) drawChart(cv,c); });
+}
+function render(){
+  const n = cols.t.length, last = k => cols[k][cols[k].length-1];
+  if(n){
+    KPI.forEach(([k,,unit,dec,color]) => {
+      const a = cols[k]; const s = stats(a);
+      $('#k_'+k).textContent = fmt(a[a.length-1],dec);
+      $('#kmin_'+k).textContent = 'min '+fmt(s[0],dec); $('#kmax_'+k).textContent = 'max '+fmt(s[1],dec);
+      drawSpark($('#ks_'+k), a, color);
+    });
+    CH.forEach(c => { const a=cols[c[0]], s=stats(a), v=a[a.length-1];
+      $('#cv_'+c[0]).textContent = c[6] ? (v?'ON':'OFF') : fmt(v,c[4])+(c[3]?' '+c[3]:'');
+      $('#cmin_'+c[0]).textContent='min '+fmt(s[0],c[4]); $('#cavg_'+c[0]).textContent='avg '+fmt(s[2],c[4]); $('#cmax_'+c[0]).textContent='max '+fmt(s[1],c[4]); });
+    drawGauge($('#gV'), last('voltage'), 0, 20, 'Voltage', ' V', 2, [[0,'#22c55e'],[85,'#f59e0b'],[95,'#ef4444']]);
+    drawGauge($('#gI'), Math.abs(last('current')), 0, cfg.imax, 'Current', ' A', 2, [[0,'#22c55e'],[60,'#f59e0b'],[85,'#ef4444']]);
+    drawGauge($('#gL'), last('loadPct'), 0, 100, 'Load index', ' %', 0, [[0,'#22c55e'],[60,'#f59e0b'],[cfg.loadAlarm,'#ef4444']]);
+    LEDS.forEach(([k,,onT,offT,cls]) => { const on = st.cur && st.cur[k]; const el=$('#led_'+k);
+      el.className = 'led'+(on?' '+cls:''); $('#ledt_'+k).textContent = on?onT:offT; });
+    $('#sVmax').textContent = fmt(st.vmax,1)+' V'; $('#sImax').textContent = fmt(st.imax,2)+' A'; $('#sPmax').textContent = fmt(st.pmax,1)+' W';
+    $('#sN').textContent = st.n.toLocaleString(); $('#sT').textContent = fmt(st.lastDevT,1)+' s';
+    $('#sLast').textContent = ((performance.now()-st.lastHost)/1000).toFixed(1)+' s ago';
+    // alerts
+    const msgs=[]; if(st.cur?.tilted_up) msgs.push('⚠ Tilt alarm active'); if(last('loadPct')>=cfg.loadAlarm) msgs.push(`⚠ High motor load (${fmt(last('loadPct'),0)} %)`);
+    if(mode==='live' && performance.now()-st.lastHost>2500) msgs.push('⚠ No data from Arduino for >2.5 s');
+    const bn=$('#banner'); bn.textContent=msgs.join('   ·   '); bn.classList.toggle('show',msgs.length>0);
+  }
+  if(st.stamps.length>2){ const a=st.stamps; $('#rate').textContent = ((a.length-1)/((a[a.length-1]-a[0])/1000)).toFixed(1)+' samples/s'; }
+  draw();
+}
+setInterval(() => { if(!paused) render(); }, 200);
+window.addEventListener('resize', () => render());
+
+/* ============================ SOURCES ============================ */
+function setStatus(m, text, dotCls){ mode=m; $('#status').textContent=text; $('#dot').className='dot '+(dotCls||''); }
+let demoTimer=null, replayTimer=null, port=null, reader=null, readLoopOn=false;
+
+// ---- Web Serial (live Arduino) ----
+async function connect(){
+  if(!('serial' in navigator)){ alert('Web Serial is not available in this browser.\nOpen this file in Google Chrome or Microsoft Edge (desktop) to connect the Arduino.\nYou can still use “Demo data” or “Replay CSV”.'); return; }
+  try{
+    stopAll(); resetData();
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: cfg.baud });
+    setStatus('live', `Live · Arduino @ ${cfg.baud} baud`, 'live'); $('#btnConnect').textContent='⏏ Disconnect';
+    logEvent('Serial port opened');
+    readLoopOn = true; readSerial();
+  }catch(e){ setStatus('idle','Connection failed: '+(e.message||e),'bad'); }
+}
+async function readSerial(){
+  const dec = new TextDecoder(); let buf='';
+  while(port && port.readable && readLoopOn){
+    reader = port.readable.getReader();
+    try{
+      while(readLoopOn){
+        const {value, done} = await reader.read(); if(done) break;
+        buf += dec.decode(value,{stream:true});
+        let i; while((i = buf.indexOf('\n')) >= 0){
+          const line = buf.slice(0,i).trim(); buf = buf.slice(i+1);
+          if(line.startsWith('{')){ try{ ingest(JSON.parse(line)); }catch(_){ /* partial line */ } }
+        }
+        if(buf.length>4000) buf='';
+      }
+    }catch(e){ setStatus('idle','Serial error: '+(e.message||e),'bad'); }
+    finally{ try{ reader.releaseLock(); }catch(_){ } }
+  }
+}
+async function disconnect(){
+  readLoopOn=false;
+  try{ if(reader) await reader.cancel(); }catch(_){ }
+  try{ if(port) await port.close(); }catch(_){ }
+  port=null; reader=null; $('#btnConnect').textContent='🔌 Connect Arduino'; logEvent('Serial port closed');
+  setStatus('idle','Disconnected','');
+}
+
+// ---- Demo generator (mimics the Arduino JSON packet) ----
+function startDemo(){
+  stopAll(); resetData(); let t0=performance.now(), prevI=0;
+  setStatus('demo','Demo · simulated Arduino data','demo'); $('#btnDemo').textContent='■ Stop demo'; $('#btnDemo').classList.add('on');
+  demoTimer = setInterval(() => {
+    const t=(performance.now()-t0)/1000, rnd=()=>Math.random()-0.5;
+    const pot = Math.max(0,Math.min(1023,Math.round(520+480*Math.sin(t/9)+rnd()*6)));
+    const pwm = pot>90 ? Math.round(pot/1023*255) : 0, run = pwm>20;
+    const I = run ? 0.6 + pwm/255*14 + rnd()*0.5 : rnd()*0.08;
+    const V = 13.1 + 0.7*Math.sin(t/23) - Math.abs(I)*0.06 + rnd()*0.04;
+    const pitch = 8*Math.sin(t/6) + rnd()*0.3;
+    st.demoI = I;
+    ingest({ time_ms:Math.round(t*1000), pot, pwm, motor_running:run, voltage:+V.toFixed(2), current:+I.toFixed(2),
+      current_sensor_voltage:+(2.5+I*0.066+rnd()*0.003).toFixed(3), current_increased: I>prevI+0.8, pitch:+pitch.toFixed(2),
+      tilted_up: pitch>5, relay1:run, relay2:V>12.8, voltage_relay:V>12.0, current_tilt_relay: pitch>5 || I>12,
+      zero_current_voltage:+(2.5+rnd()*0.002).toFixed(3) });
+    prevI=I;
+  }, 200);
+}
+// ---- CSV replay (files written by dashboard.py -> logs/session_*.csv) ----
+function parseCSV(text){
+  const lines=text.trim().split(/\r?\n/), head=lines.shift().split(',').map(s=>s.trim());
+  return lines.map(l => { const p=l.split(','), o={}; head.forEach((h,i)=>{ const v=p[i]; o[h]=(v===''||v===undefined)?undefined:v; }); return o; });
+}
+function startReplay(rows, name){
+  stopAll(); resetData(); let i=0; const per = Math.max(1,Math.round(rows.length/600));
+  setStatus('replay',`Replay · ${name} (${rows.length} samples)`,'replay');
+  replayTimer = setInterval(() => {
+    for(let k=0;k<per && i<rows.length;k++,i++) ingest(rows[i]);
+    if(i>=rows.length){ clearInterval(replayTimer); replayTimer=null; setStatus('idle','Replay finished — '+rows.length+' samples',''); }
+  }, 100);
+}
+function stopAll(){
+  if(demoTimer){ clearInterval(demoTimer); demoTimer=null; $('#btnDemo').textContent='▶ Demo data'; $('#btnDemo').classList.remove('on'); }
+  if(replayTimer){ clearInterval(replayTimer); replayTimer=null; }
+  if(port) disconnect();
+  setStatus('idle','Idle — choose a data source','');
+}
+
+/* ============================ BUTTONS ============================ */
+$('#btnConnect').onclick = () => port ? disconnect() : connect();
+$('#btnDemo').onclick = () => demoTimer ? stopAll() : startDemo();
+$('#btnCsv').onclick = () => $('#fileCsv').click();
+$('#fileCsv').onchange = async e => { const f=e.target.files[0]; if(!f) return; startReplay(parseCSV(await f.text()), f.name); e.target.value=''; };
+$('#btnPause').onclick = () => { paused=!paused; $('#btnPause').textContent = paused?'▶ Resume':'⏸ Pause'; $('#btnPause').classList.toggle('on',paused); };
+$('#btnClear').onclick = () => { resetData(); render(); };
+const FIELDS = ['time_ms','host_time','pot','pwm','motor_running','voltage','current','current_sensor_voltage','current_increased','pitch','tilted_up','relay1','relay2','voltage_relay','current_tilt_relay','zero_current_voltage'];
+$('#btnExport').onclick = () => {
+  if(!LOG.length){ alert('No data to export yet.'); return; }
+  const rows=[FIELDS.join(',')]; const hostNow = new Date().toISOString();
+  LOG.forEach(d => rows.push(FIELDS.map(f => f==='host_time' ? hostNow : (d[f]===undefined?'':d[f])).join(',')));
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  const s=new Date(); a.download=`session_${s.getFullYear()}${String(s.getMonth()+1).padStart(2,'0')}${String(s.getDate()).padStart(2,'0')}_${String(s.getHours()).padStart(2,'0')}${String(s.getMinutes()).padStart(2,'0')}${String(s.getSeconds()).padStart(2,'0')}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+// settings dialog
+const dlg = $('#dlg');
+$('#btnSet').onclick = () => { $('#cBaud').value=cfg.baud; $('#cWin').value=cfg.win; $('#cVt').value=cfg.vt; $('#cImax').value=cfg.imax;
+  $('#cRpmPwm').value=cfg.rpmPwm; $('#cRpmMax').value=cfg.rpmMax; $('#cLoadAlarm').value=cfg.loadAlarm; dlg.showModal(); };
+$('#dlgCancel').onclick = () => dlg.close();
+$('#dlgOk').onclick = () => { cfg.baud=+$('#cBaud').value; cfg.win=+$('#cWin').value; cfg.vt=+$('#cVt').value||12.5; cfg.imax=+$('#cImax').value||30;
+  cfg.rpmPwm=+$('#cRpmPwm').value||200; cfg.rpmMax=+$('#cRpmMax').value||3000; cfg.loadAlarm=+$('#cLoadAlarm').value||80; dlg.close(); };
+
+build(); render();
+</script>
+</body>
+</html>
